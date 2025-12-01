@@ -1,0 +1,12 @@
+# Mock Exchange Service Configuration
+
+server:
+  port: 8084
+
+spring:
+  application:
+    name: mock-exchange
+
+logging:
+  level:
+    com.learn.mockexchange: DEBUG

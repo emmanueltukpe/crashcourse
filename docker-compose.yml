@@ -1,0 +1,165 @@
+# Docker Compose Configuration for Cross-Border Payment Simulator
+#
+# EDUCATIONAL NOTE - Docker Compose
+#
+# Docker Compose is a tool for defining and running multi-container applications.
+# Instead of starting each service manually, this YAML file defines all services
+# and their configuration. One command starts everything!
+#
+# Commands:
+# docker-compose up -d        Start all services in background
+# docker-compose down         Stop and remove all containers
+# docker-compose logs -f      View logs from all services
+# docker-compose ps           List running services
+
+version: '3.8'
+
+services:
+  # ═══════════════════════════════════════════════════════════
+  # PostgreSQL Database
+  # ═══════════════════════════════════════════════════════════
+  postgres:
+    image: postgres:15-alpine
+    container_name: crossborder-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      # Create both databases on startup
+      POSTGRES_MULTIPLE_DATABASES: auth_db,account_db
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persist data even after container stops
+      - postgres_data:/var/lib/postgresql/data
+      # Init script to create multiple databases
+      - ./infra/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
+  # Mock Exchange Service
+  # ═══════════════════════════════════════════════════════════
+  mock-exchange:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: mock-exchange
+    container_name: crossborder-mock-exchange
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
+  # Auth Service
+  # ═══════════════════════════════════════════════════════════
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: auth-service
+    container_name: crossborder-auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/v1/auth/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
+  # Account Service
+  # ═══════════════════════════════════════════════════════════
+  account-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: account-service
+    container_name: crossborder-account-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/account_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      EXCHANGE_SERVICE_URL: http://mock-exchange:8084
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-exchange:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/api/v1/accounts/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
+  # API Gateway
+  # ═══════════════════════════════════════════════════════════
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: gateway
+    container_name: crossborder-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      # In Docker, services talk to each other by service name
+      AUTH_SERVICE_URL: http://auth-service:8081
+      ACCOUNT_SERVICE_URL: http://account-service:8082
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      account-service:
+        condition: service_healthy
+    networks:
+      - crossborder-network
+
+# ═══════════════════════════════════════════════════════════
+# Networks
+# ═══════════════════════════════════════════════════════════
+networks:
+  crossborder-network:
+    driver: bridge
+
+# ═══════════════════════════════════════════════════════════
+# Volumes (Persistent Storage)
+# ═══════════════════════════════════════════════════════════
+volumes:
+  postgres_data:
+    driver: local

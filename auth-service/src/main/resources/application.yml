@@ -1,0 +1,97 @@
+# EDUCATIONAL NOTE - application.yml Configuration
+#
+# This YAML file configures how Spring Boot runs your application.
+# YAML (YAML Ain't Markup Language) uses indentation to show structure.
+# Be careful with spaces - YAML is sensitive to indentation!
+#
+# Spring Boot reads this file on startup and uses it to configure:
+# - Server port
+# - Database connection
+# - JPA/Hibernate behavior
+# - Application-specific properties
+
+# Server Configuration
+server:
+  port: 8081  # This service runs on port 8081 (default is 8080)
+
+# Spring Configuration
+spring:
+  application:
+    name: auth-service  # Name of this microservice
+  
+  # Database Configuration
+  # EDUCATIONAL NOTE - DataSource
+  # DataSource is how Java applications connect to databases.
+  # We need to tell Spring:
+  # - Where the database is (URL)
+  # - Which database driver to use (PostgreSQL)
+  # - How to authenticate (username/password)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/auth_db  # Database connection string
+    # jdbc:postgresql:// - JDBC driver for PostgreSQL
+    # localhost:5432 - Database server location (5432 is PostgreSQL's default port)
+    # /auth_db - Database name
+    
+    username: postgres  # Database user
+    password: postgres  # Database password (In production, use environment variables!)
+    
+    driver-class-name: org.postgresql.Driver  # PostgreSQL JDBC driver
+  
+  # JPA (Java Persistence API) Configuration
+  jpa:
+    # Hibernate is the JPA implementation Spring Boot uses
+    hibernate:
+      # ddl-auto controls database schema management
+      # EDUCATIONAL NOTE - DDL (Data Definition Language) Auto
+      # Options:
+      # - none: Don't do anything
+      # - validate: Check if schema matches entities (error if mismatch)
+      # - update: Update schema to match entities (safe for development)
+      # - create: Drop all tables and recreate (LOSES DATA!)
+      # - create-drop: Like create, but drops tables when app shuts down
+      #
+      # For Stage 1, we use 'update' so tables are created automatically
+      # In production, use migration tools like Flyway or Liquibase
+      ddl-auto: update
+    
+    # Show SQL queries in console (helpful for learning!)
+    show-sql: true
+    
+    properties:
+      hibernate:
+        # Format SQL nicely in logs
+        format_sql: true
+        
+        # Use PostgreSQL-specific SQL dialect
+        # This ensures Hibernate generates optimal PostgreSQL queries
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# JWT Configuration
+# EDUCATIONAL NOTE - Custom Properties
+# You can define your own properties and inject them with @Value
+jwt:
+  # Secret key for signing JWTs
+  # SECURITY WARNING: This is a weak secret for demonstration only!
+  # In production:
+  # 1. Use a strong, randomly generated secret (at least 256 bits)
+  # 2. Store it in environment variables or a secrets manager
+  # 3. NEVER commit secrets to version control!
+  secret: myVerySecretKeyForJWTTokenGenerationThatIsAtLeast256BitsLongForHS256Algorithm
+  
+  # Token expiration in milliseconds (86400000 ms = 24 hours)
+  expiration: 86400000
+
+# Logging Configuration
+# EDUCATIONAL NOTE - Logging
+# Logging helps you debug and monitor your application.
+# Levels (least to most verbose): ERROR, WARN, INFO, DEBUG, TRACE
+logging:
+  level:
+    # Show SQL parameter values (helpful for debugging)
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    
+    # Show general Hibernate logs at DEBUG level
+    org.hibernate: DEBUG
+    
+    # Show our application logs at DEBUG level
+    com.learn.authservice: DEBUG

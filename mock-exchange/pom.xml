@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <parent>
+        <groupId>com.learn</groupId>
+        <artifactId>crossborder-sim</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+    
+    <artifactId>mock-exchange</artifactId>
+    <packaging>jar</packaging>
+    
+    <name>Mock Exchange</name>
+    <description>Simulated external exchange API</description>
+    
+    <dependencies>
+        <!-- Common module -->
+        <dependency>
+            <groupId>com.learn</groupId>
+            <artifactId>common</artifactId>
+        </dependency>
+        
+        <!-- Spring Boot Web - that's all we need! -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        
+        <!-- Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
