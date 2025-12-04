@@ -15,7 +15,10 @@
 # ═══════════════════════════════════════════════════════════
 # STAGE 1: Build the application
 # ═══════════════════════════════════════════════════════════
-FROM eclipse-temurin:17-jdk-jammy AS build
+FROM eclipse-temurin:21-jdk-jammy AS build
+
+# ARG must be declared after FROM to be used in this stage
+ARG SERVICE_NAME
 
 # Set working directory
 WORKDIR /app
@@ -51,7 +54,7 @@ RUN ./mvnw clean package -DskipTests -pl ${SERVICE_NAME} -am
 # ═══════════════════════════════════════════════════════════
 # STAGE 2: Create runtime image
 # ═══════════════════════════════════════════════════════════
-FROM eclipse-temurin:17-jre-jammy
+FROM eclipse-temurin:21-jre-jammy
 
 # Create a non-root user for security
 # Running as root inside containers is a security risk

@@ -28,6 +28,10 @@
         <module>account-service</module>
         <module>mock-exchange</module>
         <module>gateway</module>
+        <module>payment-service</module>
+        <module>ledger-service</module>
+        <module>session-service</module>
+        <module>search-service</module>
     </modules>
     
     <properties>
