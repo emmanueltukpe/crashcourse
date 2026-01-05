@@ -6,7 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import reactor.core.publisher.Mono;
+import java.util.Objects;
 
 /**
  * EDUCATIONAL NOTE - HTTP Clients and WebClient
@@ -29,7 +29,6 @@ import reactor.core.publisher.Mono;
 public class ExchangeClient {
 
   private final WebClient webClient;
-
   /**
    * Constructor with dependency injection
    * 
@@ -37,10 +36,12 @@ public class ExchangeClient {
    *        If not specified, defaults to http://localhost:8084
    */
   public ExchangeClient(@Value("${exchange.service.url:http://localhost:8084}") String exchangeUrl) {
+    Objects.requireNonNull(exchangeUrl, "exchange.service.url must not be null");
     this.webClient = WebClient.builder()
         .baseUrl(exchangeUrl)
         .build();
   }
+  
 
   /**
    * Get a quote from the exchange
@@ -79,6 +80,7 @@ public class ExchangeClient {
    * @throws ExchangeUnavailableException if execution fails
    */
   public ExecuteTradeResponse executeTrade(ExecuteTradeRequest request) {
+    Objects.requireNonNull(request, "ExecuteTradeRequest must not be null");
     try {
       return webClient.post()
           .uri("/api/execute")

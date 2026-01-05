@@ -1,0 +1,32 @@
+# Payment Service Configuration
+
+server:
+  port: 8083
+
+spring:
+  application:
+    name: payment-service
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/payment_db
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+
+logging:
+  level:
+    com.learn.paymentservice: DEBUG
+    org.springframework.kafka: INFO
+    org.hibernate: INFO

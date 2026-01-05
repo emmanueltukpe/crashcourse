@@ -1,0 +1,35 @@
+# Ledger Service Configuration
+
+server:
+  port: 8085
+
+spring:
+  application:
+    name: ledger-service
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ledger_db
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: ledger-service
+      auto-offset-reset: earliest
+
+logging:
+  level:
+    com.learn.ledgerservice: DEBUG
+    org.springframework.kafka: INFO
+    org.hibernate: INFO

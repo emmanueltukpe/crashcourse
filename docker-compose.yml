@@ -24,20 +24,146 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      # Create both databases on startup
-      POSTGRES_MULTIPLE_DATABASES: auth_db,account_db
+      # Create multiple databases for Stage 1 and Stage 2
+      POSTGRES_MULTIPLE_DATABASES: auth_db,account_db,payment_db,ledger_db
     ports:
       - "5432:5432"
     volumes:
-      # Persist data even after container stops
       - postgres_data:/var/lib/postgresql/data
-      # Init script to create multiple databases
       - ./infra/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
+  # Zookeeper - Kafka dependency
+  # ═══════════════════════════════════════════════════════════
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: crossborder-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - crossborder-network
+  
+  # ═══════════════════════════════════════════════════════════
+  # Apache Kafka - Message Broker
+  # ═══════════════════════════════════════════════════════════
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: crossborder-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
+  # Kafka UI - Web interface for viewing topics/messages
+  # ═══════════════════════════════════════════════════════════
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: crossborder-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
+  # DynamoDB Local (Stage 3)
+  # ═══════════════════════════════════════════════════════════
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: crossborder-dynamodb
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ."
+    volumes:
+      - dynamodb_data:/home/dynamodblocal
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
+  # DynamoDB Admin - GUI for DynamoDB
+  # ═══════════════════════════════════════════════════════════
+  dynamodb-admin:
+    image: aaronshaf/dynamodb-admin
+    container_name: crossborder-dynamodb-admin
+    ports:
+      - "8001:8001"
+    environment:
+      DYNAMO_ENDPOINT: "http://dynamodb-local:8000"
+      AWS_REGION: "us-east-1"
+      AWS_ACCESS_KEY_ID: "local"
+      AWS_SECRET_ACCESS_KEY: "local"
+    depends_on:
+      - dynamodb-local
+    networks:
+      - crossborder-network
+
+
+
+  # ═══════════════════════════════════════════════════════════
+  # Elasticsearch (Stage 3)
+  # ═══════════════════════════════════════════════════════════
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
+    container_name: crossborder-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
+  # Kibana (Stage 3)
+  # ═══════════════════════════════════════════════════════════
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.10
+    container_name: crossborder-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
     networks:
       - crossborder-network
 
@@ -126,6 +252,123 @@ services:
       - crossborder-network
 
   # ═══════════════════════════════════════════════════════════
+  # Payment Service (Stage 2)
+  # ═══════════════════════════════════════════════════════════
+  payment-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: payment-service
+    container_name: crossborder-payment-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payment_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/api/v1/payments/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
+  # Ledger Service (Stage 2)
+  # ═══════════════════════════════════════════════════════════
+  ledger-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: ledger-service
+    container_name: crossborder-ledger-service
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ledger_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
+  # Session Service (Stage 3)
+  # ═══════════════════════════════════════════════════════════
+  session-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: session-service
+    container_name: crossborder-session-service
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      AWS_DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+      AWS_DYNAMODB_REGION: us-east-1
+      AWS_DYNAMODB_ACCESS_KEY: fake
+      AWS_DYNAMODB_SECRET_KEY: fake
+    depends_on:
+      - dynamodb-local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/api/v1/sessions/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
+  # Search Service (Stage 3)
+  # ═══════════════════════════════════════════════════════════
+  search-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: search-service
+    container_name: crossborder-search-service
+    ports:
+      - "8087:8087"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      ELASTICSEARCH_URIS: http://elasticsearch:9200
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8087/api/v1/search/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - crossborder-network
+
+  # ═══════════════════════════════════════════════════════════
   # API Gateway
   # ═══════════════════════════════════════════════════════════
   gateway:
@@ -142,10 +385,19 @@ services:
       # In Docker, services talk to each other by service name
       AUTH_SERVICE_URL: http://auth-service:8081
       ACCOUNT_SERVICE_URL: http://account-service:8082
+      PAYMENT_SERVICE_URL: http://payment-service:8083
+      SESSION_SERVICE_URL: http://session-service:8086
+      SEARCH_SERVICE_URL: http://search-service:8087
     depends_on:
       auth-service:
         condition: service_healthy
       account-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      session-service:
+        condition: service_healthy
+      search-service:
         condition: service_healthy
     networks:
       - crossborder-network
@@ -162,4 +414,8 @@ networks:
 # ═══════════════════════════════════════════════════════════
 volumes:
   postgres_data:
+    driver: local
+  dynamodb_data:
+    driver: local
+  elasticsearch_data:
     driver: local

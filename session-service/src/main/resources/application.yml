@@ -1,0 +1,18 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: session-service
+
+aws:
+  dynamodb:
+    endpoint: http://localhost:8000
+    region: us-east-1
+    access-key: fake
+    secret-key: fake
+
+logging:
+  level:
+    root: INFO
+    com.learn.sessionservice: DEBUG
