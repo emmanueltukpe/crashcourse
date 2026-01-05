@@ -133,6 +133,9 @@ public class PaymentService {
    */
   @Transactional(readOnly = true)
   public Payment getPaymentById(Long paymentId) {
+    if (paymentId == null) {
+      throw new RuntimeException("Payment ID cannot be null");
+    }
     return paymentRepository.findById(paymentId)
         .orElseThrow(() -> new RuntimeException("Payment not found: " + paymentId));
   }
@@ -143,6 +146,9 @@ public class PaymentService {
    */
   @Transactional
   public void updatePaymentStatus(Long paymentId, PaymentStatus newStatus) {
+    if (paymentId == null) {
+      throw new RuntimeException("Payment ID cannot be null");
+    }
     Payment payment = paymentRepository.findById(paymentId)
         .orElseThrow(() -> new RuntimeException("Payment not found: " + paymentId));
 
